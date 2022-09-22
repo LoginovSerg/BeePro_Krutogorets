@@ -1,8 +1,0 @@
-* Partlist : 2022-02-08 16:15:27
-
-See partlist here - https://github.com/BeePro-scales/BeePro/blob/main/Hardware/PartList.csv
-
-Simholder example: https://github.com/BeePro-scales/BeePro/blob/main/Hardware/SimHolder.jpg
-
-Feel free to ping us at beeproscales@gmail.com - if you're intrested to buy parts "KIT"
-
