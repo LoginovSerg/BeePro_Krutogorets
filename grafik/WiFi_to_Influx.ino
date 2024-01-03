@@ -1,7 +1,7 @@
 //
-// Передатчик через MQTT json строки с весов
+// json строку с весов сохраняем в Influxdb
 // ESP32 Wemos Lolin32
-// V1.0 29.12.2023
+// V1.0 03.01.2024
 //
 
 const char* ssid = "MR3020_V3";             // WiFi ssid
@@ -9,19 +9,20 @@ const char* password = "asdfghjkl";         // WiFi password
 const char* mqtt_server = "192.168.1.100";  // MQTT server IP
 const char* topic = "scale";                // MQTT topic
 
-
+const char* serverName = "http://192.168.1.100:8086/write?db=Krutogorie";   // Edit base name
+const char* tag = "Scales";
 
 #include <WiFi.h>
-#include <PubSubClient.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
 
 #define ledPin 22 	       // LED pin Lolin32 lite
 #define ON_pin 12          // Hold power On pin
 
 WiFiClient espClient;
-PubSubClient client(espClient);
 
 #define TOP_BUFFER_SIZE 32  // max topic size
-#define MSG_BUFFER_SIZE 128 // max message size
+#define MSG_BUFFER_SIZE 256 // max message size
 char top[TOP_BUFFER_SIZE];
 char msg[MSG_BUFFER_SIZE];
 uint32_t ID;
@@ -47,27 +48,6 @@ void wifi_cnnect() {
   }
   Serial.print("IP: "); Serial.print(WiFi.localIP());
   Serial.print(", RSSI: "); Serial.println(WiFi.RSSI());
-}
-
-void MQTT_connect() {
-  Serial.print("MQTT connection...");
-  client.setServer(mqtt_server, 1883);
-  snprintf (top, TOP_BUFFER_SIZE, "%06X", ID);  // Client ID
-  uint32_t time = millis();
-  while (!client.connected()) {       // Loop until not connected
-    if (!client.connect(msg)) {
-      Serial.print("failed, rc=");
-      Serial.println(client.state());
-      delay(500);   // Wait 0.5 seconds before retrying
-      if (millis() - time >= 5000) {  // 5sec timeout
-        Serial.println("MQTT not connected!");
-        digitalWrite(ON_pin, LOW);    // power OFF
-        LedOff();
-        esp_deep_sleep_start();       // sleep forever
-      }
-    }
-  }
-  Serial.println("OK");
 }
 
 uint8_t read_serial2() {
@@ -108,28 +88,52 @@ void setup() {
 }
 
 void loop() {
-
-  Serial2.flush();
-  Serial2.setTimeout(5000);
-//  uint8_t len = Serial2.readBytesUntil('\n', msg, MSG_BUFFER_SIZE);
+  StaticJsonDocument<200> doc;
 
   uint8_t len = read_serial2();
+//  strcpy(msg, "{\"TIME\":\"13:17\",\"T\":21.9,\"RH\":29,\"WEIGHT\":0.018,\"W2\":0.018,\"V\":3.948}");
+//  int len = strlen(msg);
   Serial.print("Rx="); Serial.println(len);
 
   if ( len > 5 ){
     Serial.println(msg);
-    if (msg[0] == '{'){
-      wifi_cnnect();
-      MQTT_connect();
-      snprintf (top, TOP_BUFFER_SIZE, "scale/%06X", ID);  // set topic
-      snprintf (msg, MSG_BUFFER_SIZE, msg);               // UART2 received string
-      Serial.print("Publish: "); Serial.print(top); Serial.print(" "); Serial.println(msg);
-      // Send to server
-      if(client.publish(top, msg) == true){
-        Serial.println("Send OK.");
-      } else {
-        Serial.println("MQTT send error!");
-      }
+    DeserializationError error = deserializeJson(doc, msg); // parse json
+    if (error) {  // Test if parsing succeeds.
+      Serial.print(F("deserializeJson() failed: "));
+      Serial.println(error.f_str());
+      return;
+    }
+
+    float T = doc["T"];
+    int RH = doc["RH"];
+    float WEIGHT = doc["WEIGHT"];
+    float W2 = doc["W2"];
+    float V = doc["V"];
+
+    Serial.print("T="); Serial.println(T);
+    Serial.print("RH="); Serial.println(RH);
+    Serial.print("WEIGHT="); Serial.println(WEIGHT);
+    Serial.print("W2="); Serial.println(W2);
+    Serial.print("V="); Serial.println(V);
+
+    len = snprintf (msg, MSG_BUFFER_SIZE, "%s,DEV=%06X T=%.1f\n", tag, ID, T);
+    len += snprintf (msg+len, MSG_BUFFER_SIZE, "%s,DEV=%06X RH=%d\n", tag, ID, RH);
+    len += snprintf (msg+len, MSG_BUFFER_SIZE, "%s,DEV=%06X WEIGHT=%.3f\n", tag, ID, WEIGHT);
+    len += snprintf (msg+len, MSG_BUFFER_SIZE, "%s,DEV=%06X RH=%.3f\n", tag, ID, W2);
+    len += snprintf (msg+len, MSG_BUFFER_SIZE, "%s,DEV=%06X V=%.3f", tag, ID, V);
+    Serial.print("msg="); Serial.println(msg);
+
+    // Send to server
+    wifi_cnnect();
+    if(WiFi.status()== WL_CONNECTED){
+      WiFiClient client;
+      HTTPClient http;
+      http.begin(client, serverName);
+      http.addHeader("Content-Type", "text/plain");         // Specify content-type header
+      int httpResponseCode = http.POST((uint8_t*)msg, len); // Send HTTP POST request
+      Serial.print("HTTP Response code: ");
+      Serial.println(httpResponseCode);
+      http.end(); // Free resources
     }
   }
 Serial.print("Finish:"); Serial.println( millis() );
