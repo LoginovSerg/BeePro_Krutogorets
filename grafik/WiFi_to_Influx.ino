@@ -4,31 +4,29 @@
 // V1.0 03.01.2024
 //
 
-const char* ssid = "MR3020_V3";             // WiFi ssid
-const char* password = "asdfghjkl";         // WiFi password
-const char* mqtt_server = "192.168.1.100";  // MQTT server IP
-const char* topic = "scale";                // MQTT topic
+const char* ssid = "";             // WiFi ssid
+const char* password = "";         // WiFi password
+const char* serverIP = "192.168.1.100";     // Server IP
+const char* baseName = "Base1";             // Influxdb base name
 
-const char* serverName = "http://192.168.1.100:8086/write?db=Krutogorie";   // Edit base name
 const char* tag = "Scales";
 
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 
-#define ledPin 22 	       // LED pin Lolin32 lite
 #define ON_pin 12          // Hold power On pin
 
 WiFiClient espClient;
 
-#define TOP_BUFFER_SIZE 32  // max topic size
+#define TOP_BUFFER_SIZE 64  // max topic size
 #define MSG_BUFFER_SIZE 256 // max message size
 char top[TOP_BUFFER_SIZE];
 char msg[MSG_BUFFER_SIZE];
 uint32_t ID;
 
-inline void LedOn() { digitalWrite(ledPin, LOW); }  // Led On
-inline void LedOff(){ digitalWrite(ledPin, HIGH); } // Led Off
+inline void LedOn() { digitalWrite(LED_BUILTIN, LOW); }  // Led On
+inline void LedOff(){ digitalWrite(LED_BUILTIN, HIGH); } // Led Off
 
 void wifi_cnnect() {
   WiFi.mode(WIFI_STA);
@@ -73,7 +71,7 @@ Serial.println("end.");
 
 
 void setup() {
-  pinMode(ledPin, OUTPUT);
+  pinMode(LED_BUILTIN, OUTPUT);
   LedOn();
   pinMode(ON_pin, OUTPUT);
   digitalWrite(ON_pin, HIGH);        // Hold power On
@@ -85,6 +83,11 @@ void setup() {
   ID = macAddress >> 24;
   ID = ((ID&0x0000FF)<<16)|(ID&0x00FF00)|((ID&0xFF0000)>>16); // swap bytes. MAC записан в обратном порядке
   Serial.printf("ID:%06X\n", ID);
+
+  snprintf (top, TOP_BUFFER_SIZE, "http://%s:8086/write?db=%s",serverIP ,baseName);
+  Serial.print("serverName=");
+  Serial.println(top);
+
 }
 
 void loop() {
@@ -128,7 +131,9 @@ void loop() {
     if(WiFi.status()== WL_CONNECTED){
       WiFiClient client;
       HTTPClient http;
-      http.begin(client, serverName);
+      snprintf (top, TOP_BUFFER_SIZE, "http://%s:8086/write?db=%s", serverIP, baseName);
+      Serial.print("serverName="); Serial.println(top);
+      http.begin(client, top);
       http.addHeader("Content-Type", "text/plain");         // Specify content-type header
       int httpResponseCode = http.POST((uint8_t*)msg, len); // Send HTTP POST request
       Serial.print("HTTP Response code: ");
