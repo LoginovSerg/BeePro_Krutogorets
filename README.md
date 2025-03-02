@@ -111,7 +111,7 @@ IO4 на вашей плате подключаем к затвору или mos
 ![github](/images/grafik.png)
 
 ## Инструкция по эксплуатации
-![github](/manual/BeePro_Manual.pdf)
+![BeePro_Manual.pdf](/manual/BeePro_Manual.pdf)
 
 ## Обуждение на форуме.
 https://pchelovod.info/index.php?showtopic=84333&st=0
